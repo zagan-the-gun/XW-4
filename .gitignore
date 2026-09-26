@@ -1,0 +1,24 @@
+# 認証情報
+.env
+
+# Frigate の録画・スナップショット
+media/
+
+# Frigate が /config に生成するもの（DB、鍵、バックアップ、モデルキャッシュ、顔登録画像）
+# 設定ファイル本体だけを追跡する
+config/*
+!config/config.yml
+!config/config.mac.yml
+
+# 自前 DB
+*.db
+*.sqlite
+*.sqlite3
+data/
+
+# OS / エディタ
+.DS_Store
+.vscode/
+.idea/
+__pycache__/
+*.pyc

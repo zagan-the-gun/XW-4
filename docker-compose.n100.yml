@@ -1,0 +1,7 @@
+# N100（Intel iGPU）用 override
+# .env: COMPOSE_FILE=docker-compose.yml:docker-compose.n100.yml
+services:
+  frigate:
+    devices:
+      # VAAPI デコード / OpenVINO GPU 推論
+      - /dev/dri/renderD128:/dev/dri/renderD128

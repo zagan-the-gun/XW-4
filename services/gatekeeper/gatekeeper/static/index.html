@@ -1,0 +1,225 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>門番くん 統計</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<style>
+  :root { --bg:#0f1115; --card:#181b22; --line:#2a2f3a; --fg:#e6e8ee; --muted:#9aa3b2; --accent:#4f8cff; --male:#4f8cff; --female:#ff7aa2; --unknown:#5b6270; }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--fg); font-family:-apple-system,"Hiragino Sans","Noto Sans JP",sans-serif; font-size:14px; }
+  header { display:flex; align-items:baseline; gap:16px; padding:16px 20px; border-bottom:1px solid var(--line); }
+  header h1 { margin:0; font-size:18px; }
+  header .sub { color:var(--muted); font-size:12px; }
+  main { padding:16px 20px 40px; display:grid; gap:16px; grid-template-columns:repeat(12,1fr); }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:10px; padding:14px 16px; }
+  .card h2 { margin:0 0 10px; font-size:13px; color:var(--muted); font-weight:600; letter-spacing:.02em; }
+  .span3{grid-column:span 3} .span4{grid-column:span 4} .span6{grid-column:span 6} .span8{grid-column:span 8} .span12{grid-column:span 12}
+  @media (max-width:900px){ .span3,.span4,.span6,.span8{grid-column:span 12} }
+  .kpi { font-size:30px; font-weight:700; line-height:1.1; }
+  .kpi small { font-size:12px; color:var(--muted); font-weight:400; margin-left:6px; }
+  .row { display:flex; gap:10px; align-items:center; flex-wrap:wrap; }
+  .seg button { background:transparent; border:1px solid var(--line); color:var(--muted); padding:4px 10px; border-radius:6px; cursor:pointer; }
+  .seg button.on { color:var(--fg); border-color:var(--accent); }
+  table { width:100%; border-collapse:collapse; }
+  th,td { text-align:left; padding:6px 8px; border-bottom:1px solid var(--line); vertical-align:middle; white-space:nowrap; }
+  th { color:var(--muted); font-weight:600; font-size:12px; }
+  td.num { text-align:right; font-variant-numeric:tabular-nums; }
+  img.thumb { width:44px; height:44px; object-fit:cover; border-radius:6px; background:#000; }
+  input.name { background:#0f1115; border:1px solid var(--line); color:var(--fg); padding:4px 8px; border-radius:6px; width:140px; }
+  button.mini { background:transparent; border:1px solid var(--line); color:var(--muted); padding:3px 8px; border-radius:6px; cursor:pointer; font-size:12px; }
+  button.mini:hover { color:var(--fg); }
+  .heat { display:grid; grid-template-columns:36px repeat(24, 1fr); gap:2px; }
+  .heat .lab { color:var(--muted); font-size:11px; display:flex; align-items:center; justify-content:flex-end; padding-right:6px; }
+  .heat .h { color:var(--muted); font-size:10px; text-align:center; }
+  .heat .c { aspect-ratio:1; border-radius:3px; background:#1f2430; position:relative; }
+  .heat .c:hover::after { content:attr(data-t); position:absolute; left:50%; top:-26px; transform:translateX(-50%); background:#000; color:#fff; font-size:11px; padding:2px 6px; border-radius:4px; white-space:nowrap; z-index:2; }
+  .tag { display:inline-block; padding:1px 7px; border-radius:10px; font-size:11px; }
+  .tag.male{background:rgba(79,140,255,.18);color:#9dbcff} .tag.female{background:rgba(255,122,162,.18);color:#ffb0c7} .tag.unknown{background:rgba(91,98,112,.25);color:#b5bcc9}
+  .tag.low{background:rgba(91,98,112,.25);color:#b5bcc9} .tag.medium{background:rgba(255,176,0,.2);color:#ffd166} .tag.high{background:rgba(255,77,79,.22);color:#ff8f91}
+  .muted { color:var(--muted); }
+  .note { color:var(--muted); font-size:12px; margin-top:8px; }
+  a.lnk { color:var(--accent); text-decoration:none; }
+  code.clickable { cursor:pointer; text-decoration:underline dotted; }
+  .modal { position:fixed; inset:0; background:rgba(0,0,0,.75); display:none; align-items:center; justify-content:center; z-index:10; padding:20px; }
+  .modal.on { display:flex; }
+  .modal .box { background:var(--card); border:1px solid var(--line); border-radius:10px; padding:12px; max-width:960px; width:100%; }
+  .modal video { width:100%; max-height:70vh; background:#000; border-radius:6px; }
+  .modal .bar { display:flex; gap:8px; align-items:center; margin-bottom:8px; flex-wrap:wrap; }
+  .filter { display:none; gap:8px; align-items:center; margin-bottom:8px; }
+  .filter.on { display:flex; }
+</style>
+</head>
+<body>
+<header>
+  <h1>門番くん 統計</h1>
+  <span class="sub" id="generated">読み込み中…</span>
+  <span class="sub" style="margin-left:auto">性別・年齢は顔画像からの<b>推定</b>（夜間の赤外線映像では推定しない）</span>
+  <a class="sub" href="/frigate/" style="color:var(--accent);text-decoration:none;border:1px solid var(--line);padding:4px 10px;border-radius:6px">Frigate を開く →</a>
+</header>
+<main>
+  <section class="card span3"><h2>今日の検知 / 来訪</h2><div class="kpi" id="kToday">–</div><div class="note">検知 = person イベント数、来訪 = 同一人物の連続イベントを 1 回にまとめた数</div></section>
+  <section class="card span3"><h2><span id="kDaysLabel">7 日間</span>の来訪</h2><div class="kpi" id="kVisits">–</div><div class="note" id="kVisitsNote"></div></section>
+  <section class="card span3"><h2>特定できた人物</h2><div class="kpi" id="kPersons">–</div><div class="note" id="kPersonsNote"></div></section>
+  <section class="card span3"><h2>推定男女比（来訪単位）</h2><div class="row"><canvas id="genderChart" width="120" height="120" style="max-width:120px;max-height:120px"></canvas><div id="genderLegend" class="muted" style="font-size:12px"></div></div></section>
+
+  <section class="card span8">
+    <div class="row" style="justify-content:space-between"><h2 style="margin:0">日別の通行量</h2>
+      <div class="seg" id="daysSeg"><button data-d="7" class="on">7日</button><button data-d="30">30日</button><button data-d="90">90日</button></div></div>
+    <canvas id="dailyChart" height="110"></canvas>
+  </section>
+  <section class="card span4"><h2>時間帯別（今日）</h2><canvas id="hourlyChart" height="220"></canvas></section>
+
+  <section class="card span12">
+    <div class="row" style="justify-content:space-between"><h2 style="margin:0">曜日 × 時間帯ヒートマップ <span class="muted" id="heatDays"></span></h2>
+      <div class="seg" id="heatSeg"><button data-m="all" class="on">全員</button><button data-m="identified">特定できた人のみ</button></div></div>
+    <div class="heat" id="heat"></div>
+  </section>
+
+  <section class="card span12"><h2>人物一覧（表示名は編集して Enter で保存）</h2>
+    <div style="overflow:auto"><table id="persons"><thead><tr><th></th><th>ID</th><th>表示名</th><th class="num">来訪</th><th class="num">検知</th><th>最終訪問</th><th>初回</th><th>推定性別 / 年齢</th><th></th></tr></thead><tbody></tbody></table></div>
+    <div class="note">統合: 同一人物に別 ID が付いたとき、その行の ID を残す側の ID に統合します。削除: 顔が写っていない誤登録を消します（訪問は未特定に戻ります）。</div>
+  </section>
+
+  <section class="card span12"><h2>アラート <span class="muted">（行動ベースの危険度: 未登録・滞在時間・夜間・再来訪で加点。「中」以上を Discord に通知）</span></h2>
+    <div class="seg" id="alertSeg" style="margin-bottom:8px"><button data-m="medium" class="on">中以上</button><button data-m="high">高のみ</button><button data-m="low">すべて</button></div>
+    <div style="overflow:auto"><table id="alerts"><thead><tr><th>日時</th><th>レベル</th><th class="num">スコア</th><th>対象</th><th>理由</th><th>通知</th><th>動画</th></tr></thead><tbody></tbody></table></div>
+  </section>
+
+  <section class="card span12"><h2>同じ見た目の未特定グループ <span class="muted">（顔は見えないが服装・持ち物が似ている来訪を 24 時間以内でまとめたもの。推定）</span></h2>
+    <div style="overflow:auto"><table id="groups"><thead><tr><th></th><th>グループ</th><th class="num">来訪</th><th class="num">検知</th><th>初回</th><th>最終</th><th>推定性別</th></tr></thead><tbody></tbody></table></div>
+  </section>
+
+  <section class="card span12"><h2>最近の来訪</h2>
+    <div class="filter" id="visitFilter"><span>絞り込み: <code id="visitFilterId"></code></span><button class="mini" id="visitFilterClear">解除</button></div>
+    <div style="overflow:auto"><table id="visits"><thead><tr><th></th><th>日時</th><th class="num">滞在</th><th class="num">検知数</th><th>人物</th><th>判定</th><th>見た目</th><th>危険度</th><th>推定性別 / 年齢</th><th>動画</th><th>備考</th></tr></thead><tbody></tbody></table></div>
+    <div class="note">動画は Frigate の録画（動きのある区間を 3 日、人物イベントは 30 日保持）から取り出す。Frigate リンクは該当イベントの詳細画面（要ログイン）。</div>
+  </section>
+  <div class="modal" id="modal"><div class="box"><div class="bar"><b id="modalTitle"></b><span id="modalEvents"></span><a class="lnk" id="modalFrigate" target="_blank" rel="noopener">Frigate で開く</a><button class="mini" id="modalClose" style="margin-left:auto">閉じる</button></div><video id="modalVideo" controls playsinline></video></div></div>
+</main>
+<script>
+const $ = s => document.querySelector(s);
+const esc = v => String(v ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+let serverTz = 'Asia/Tokyo';
+const tzName = abbr => ({JST:'Asia/Tokyo',UTC:'UTC'})[abbr] || Intl.DateTimeFormat().resolvedOptions().timeZone;
+const fmtT = ts => ts ? new Date(ts*1000).toLocaleString('ja-JP',{month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',timeZone:serverTz}) : '-';
+const fmtD = s => s==null ? '-' : (s<60 ? Math.round(s)+'秒' : Math.round(s/60)+'分');
+const gtag = (g,a) => { const l={male:'男性',female:'女性'}[g]||'不明'; const cls = ['male','female'].includes(g)?g:'unknown'; return `<span class="tag ${cls}">${l}${a?` ${esc(a)}歳`:''}</span>`; };
+const rtag = (l, s, reasons) => l ? `<span class="tag ${esc(l)}" title="${esc((reasons||[]).join('、'))}">${({low:'低',medium:'中',high:'高'})[l]||esc(l)} ${esc(s)}</span>` : '<span class="muted">-</span>';
+const methodLabel = m => ({frigate:'Frigate 認識',attempts:'顔一致',new:'新規 ID',snapshot:'写真で一致','snapshot-new':'写真で新規',none:'未特定',pending:'処理中'})[m]||esc(m);
+let days = 7, heatMode = 'all', charts = {}, seq = 0;
+
+async function api(path, opt){
+  opt = opt || {};
+  opt.headers = Object.assign({'X-Requested-With':'gatekeeper'}, opt.headers || {});
+  const r = await fetch(path, opt);
+  if(!r.ok){ const e = await r.json().catch(()=>({})); throw new Error(e.error||r.status); }
+  return r.json();
+}
+
+async function loadSummary(){
+  const my = seq, d = days;
+  const s = await api(`/api/summary?days=${d}`);
+  if(my !== seq) return;  // 期間切替後に届いた古い応答は捨てる
+  if(s.tz) serverTz = tzName(s.tz);
+  $('#generated').textContent = '更新 ' + new Date(s.generated_at*1000).toLocaleTimeString('ja-JP',{timeZone:serverTz}) + `（${esc(s.tz||'')} 基準）`;
+  $('#kToday').innerHTML = `${s.today_events}<small>検知</small> / ${s.today_visits}<small>来訪</small>`;
+  $('#kDaysLabel').textContent = `${days} 日間`;
+  $('#kVisits').innerHTML = `${s.visits}<small>回</small>`;
+  $('#kVisitsNote').textContent = `顔で特定 ${s.identified_visits} 回、見た目で推定 ${s.appearance_visits||0} 回、同じ見た目の未特定 ${s.grouped_visits||0} 回 / 検知 ${s.events} 件`;
+  $('#kPersons').innerHTML = `${s.persons}<small>人</small>`;
+  $('#kPersonsNote').textContent = `${days} 日間に来た登録済み人物の数`;
+  const g = s.gender, tot = g.male+g.female+g.unknown || 1;
+  $('#genderLegend').innerHTML = `男性 ${g.male}（${Math.round(g.male/tot*100)}%）<br>女性 ${g.female}（${Math.round(g.female/tot*100)}%）<br>不明 ${g.unknown}（顔が見えない等）`;
+  draw('genderChart', {type:'doughnut', data:{labels:['男性','女性','不明'], datasets:[{data:[g.male,g.female,g.unknown], backgroundColor:['#4f8cff','#ff7aa2','#5b6270'], borderWidth:0}]}, options:{plugins:{legend:{display:false}}, cutout:'60%'}});
+}
+async function loadTraffic(){
+  const my = seq, d = days;
+  const t = await api(`/api/traffic?days=${d}`);
+  if(my !== seq) return;
+  draw('dailyChart', {type:'bar', data:{labels:t.daily.map(d=>d.date.slice(5)), datasets:[
+    {label:'検知', data:t.daily.map(d=>d.events), backgroundColor:'rgba(79,140,255,.35)'},
+    {label:'来訪', data:t.daily.map(d=>d.visits), backgroundColor:'rgba(79,140,255,.9)'},
+    {label:'特定できた検知', data:t.daily.map(d=>d.identified), backgroundColor:'rgba(255,200,80,.9)'}]},
+    options:{responsive:true, scales:{x:{grid:{display:false},ticks:{color:'#9aa3b2'}}, y:{beginAtZero:true,ticks:{color:'#9aa3b2',precision:0},grid:{color:'#2a2f3a'}}}, plugins:{legend:{labels:{color:'#9aa3b2'}}}}});
+  draw('hourlyChart', {type:'bar', data:{labels:[...Array(24).keys()].map(h=>h+'時'), datasets:[{label:'検知', data:t.hourly_today, backgroundColor:'rgba(79,140,255,.8)'}]},
+    options:{responsive:true, scales:{x:{grid:{display:false},ticks:{color:'#9aa3b2',maxRotation:0,autoSkip:true}}, y:{beginAtZero:true,ticks:{color:'#9aa3b2',precision:0},grid:{color:'#2a2f3a'}}}, plugins:{legend:{display:false}}}});
+}
+async function loadHeat(){
+  const h = await api('/api/heatmap?days=28');
+  $('#heatDays').textContent = `（直近 ${h.days} 日、検知数）`;
+  const grid = h[heatMode]; const max = Math.max(1, ...grid.flat());
+  const dow = ['月','火','水','木','金','土','日'];
+  let html = '<div></div>' + [...Array(24).keys()].map(x=>`<div class="h">${x%3==0?x:''}</div>`).join('');
+  grid.forEach((row,d)=>{ html += `<div class="lab">${dow[d]}</div>` + row.map((v,x)=>{ const a = v? (0.15+0.85*v/max) : 0; return `<div class="c" data-t="${dow[d]} ${x}時: ${v}件" style="background:${v?`rgba(79,140,255,${a.toFixed(2)})`:'#1f2430'}"></div>`; }).join(''); });
+  $('#heat').innerHTML = html;
+}
+async function loadPersons(){
+  const p = await api('/api/persons');
+  $('#persons tbody').innerHTML = p.persons.map(r=>`<tr data-id="${esc(r.id)}">
+    <td>${r.face_file?`<img class="thumb" src="/faces/${encodeURIComponent(r.face_file.replace('faces/',''))}" loading="lazy">`:''}</td>
+    <td><code class="clickable" data-filter="${esc(r.id)}" title="この人物の来訪だけ表示">${esc(r.id)}</code></td>
+    <td><input class="name" value="${esc(r.display_name||'')}" placeholder="（未設定）"></td>
+    <td class="num">${esc(r.visits)}${r.appearance_events?` <span class="muted" title="うち見た目で推定した検知">(+${esc(r.appearance_events)})</span>`:''}</td><td class="num">${esc(r.events)}</td>
+    <td>${fmtT(r.last_seen)}</td><td>${fmtT(r.first_seen)}</td>
+    <td>${r.gender?gtag(r.gender,r.age):'<span class="muted">-</span>'}</td>
+    <td><button class="mini" data-act="merge">統合…</button> <button class="mini" data-act="purge">削除…</button></td></tr>`).join('') || '<tr><td colspan="9" class="muted">まだ人物はいません</td></tr>';
+}
+let visitFilter = null;
+async function loadVisits(){
+  const v = await api('/api/visits?limit=60' + (visitFilter ? `&person=${encodeURIComponent(visitFilter)}` : ''));
+  $('#visitFilter').classList.toggle('on', !!visitFilter); $('#visitFilterId').textContent = visitFilter || '';
+  $('#visits tbody').innerHTML = v.visits.map(r=>{
+    const img = r.face_file ? `/faces/${encodeURIComponent(r.face_file.replace('faces/',''))}` : `/api/events/${encodeURIComponent(r.event_id)}/snapshot.jpg`;
+    const who = r.person_id ? `<code>${esc(r.person_id)}</code>${r.display_name?` ${esc(r.display_name)}`:''}`
+      : r.appearance_person ? `<code>${esc(r.appearance_person)}</code>${r.display_name?` ${esc(r.display_name)}`:''} <span class="muted">(推定)</span>`
+      : '<span class="muted">未特定</span>';
+    const look = r.appearance_person ? `<span class="tag unknown">見た目で ${esc(r.appearance_person)}</span>` : r.appearance_group ? `<span class="tag unknown">グループ ${esc(r.appearance_group)}</span>` : '<span class="muted">-</span>';
+    const ids = (r.event_ids||[r.event_id]).map(esc).join(',');
+    const vid = `<button class="mini" data-play="${ids}" data-title="${fmtT(r.start_time)} ${r.person_id?esc(r.person_id):(r.appearance_person?esc(r.appearance_person)+'(推定)':'未特定')}">▶ 動画</button> <a class="lnk" href="/frigate/explore?event_id=${encodeURIComponent(r.event_id)}" target="_blank" rel="noopener" title="Frigate の詳細画面">Frigate</a>`;
+    return `<tr><td><img class="thumb" src="${img}" loading="lazy" onerror="this.style.visibility='hidden'"></td><td>${fmtT(r.start_time)}</td><td class="num">${fmtD(r.duration)}</td><td class="num">${esc(r.events)}</td><td>${who}</td><td>${methodLabel(r.method)}${r.score?` <span class="muted">${Number(r.score).toFixed(2)}</span>`:''}</td><td>${look}${r.appearance_score?` <span class="muted">${Number(r.appearance_score).toFixed(2)}</span>`:''}</td><td>${rtag(r.risk_level, r.risk_score, r.risk_reasons)}</td><td>${r.gender?gtag(r.gender,r.age):'<span class="muted">-</span>'}</td><td>${vid}</td><td class="muted">${esc(r.reason||'')}</td></tr>`; }).join('') || '<tr><td colspan="11" class="muted">まだ来訪はありません</td></tr>';
+}
+let alertMin = 'medium';
+async function loadAlerts(){
+  const a = await api(`/api/alerts?days=7&min=${alertMin}`);
+  $('#alerts tbody').innerHTML = a.alerts.map(r=>`<tr><td>${fmtT(r.start_time)}</td><td>${rtag(r.level, r.score, r.reasons)}</td><td class="num">${esc(r.score)}</td><td>${r.subject?`<code class="clickable" data-filter="${esc(r.subject)}">${esc(r.subject)}</code>${r.display_name?` ${esc(r.display_name)}`:''}`:'<span class="muted">未特定</span>'}</td><td>${esc((r.reasons||[]).join('、'))}</td><td>${r.notified_at?`${fmtT(r.notified_at)}${r.notify_count>1?` ×${esc(r.notify_count)}`:''}`:'<span class="muted">-</span>'}</td><td><button class="mini" data-play="${esc(r.event_id)}" data-title="${fmtT(r.start_time)} ${r.subject?esc(r.subject):'未特定'}">▶ 動画</button> <a class="lnk" href="/frigate/explore?event_id=${encodeURIComponent(r.event_id)}" target="_blank" rel="noopener">Frigate</a></td></tr>`).join('') || '<tr><td colspan="7" class="muted">この期間のアラートはありません</td></tr>';
+}
+async function loadGroups(){
+  const g = await api('/api/appearance-groups?days=7');
+  $('#groups tbody').innerHTML = g.groups.filter(x=>x.visits>=2).map(r=>{
+    const img = r.face_file ? `/faces/${encodeURIComponent(r.face_file.replace('faces/',''))}` : `/api/events/${encodeURIComponent(r.event_ids[r.event_ids.length-1])}/snapshot.jpg`;
+    return `<tr><td><img class="thumb" src="${img}" loading="lazy" onerror="this.style.visibility='hidden'"></td><td><code class="clickable" data-filter="${esc(r.id)}" title="このグループの来訪だけ表示">${esc(r.id)}</code></td><td class="num">${esc(r.visits)}</td><td class="num">${esc(r.events)}</td><td>${fmtT(r.first_seen)}</td><td>${fmtT(r.last_seen)}</td><td>${r.gender?gtag(r.gender):'<span class="muted">-</span>'}</td></tr>`; }).join('') || '<tr><td colspan="7" class="muted">2 回以上来た未特定の見た目グループはまだありません</td></tr>';
+}
+function draw(id, cfg){ if(charts[id]) charts[id].destroy(); charts[id] = new Chart($('#'+id), cfg); }
+async function loadAll(){ await Promise.all([loadSummary(), loadTraffic(), loadHeat(), loadPersons(), loadAlerts(), loadGroups(), loadVisits()]).catch(e=>{ $('#generated').textContent = 'エラー: ' + e.message; }); }
+
+$('#daysSeg').addEventListener('click', e=>{ if(e.target.dataset.d){ days = +e.target.dataset.d; seq++; [...e.currentTarget.children].forEach(b=>b.classList.toggle('on', b===e.target)); loadSummary(); loadTraffic(); }});
+$('#heatSeg').addEventListener('click', e=>{ if(e.target.dataset.m){ heatMode = e.target.dataset.m; [...e.currentTarget.children].forEach(b=>b.classList.toggle('on', b===e.target)); loadHeat(); }});
+$('#persons').addEventListener('keydown', async e=>{ if(e.target.classList.contains('name') && e.key==='Enter'){ const id = e.target.closest('tr').dataset.id; try{ await api(`/api/persons/${encodeURIComponent(id)}`, {method:'PUT', headers:{'Content-Type':'application/json'}, body:JSON.stringify({display_name:e.target.value})}); e.target.style.borderColor='#4f8cff'; loadVisits(); }catch(err){ alert('保存に失敗: '+err.message); } }});
+$('#persons').addEventListener('click', async e=>{ const act = e.target.dataset.act; if(!act) return; const id = e.target.closest('tr').dataset.id;
+  try{
+    if(act==='merge'){ const into = prompt(`${id} をどの ID に統合しますか？（残す側の ID）`); if(!into) return; await api(`/api/persons/${encodeURIComponent(id)}/merge`, {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({into:into.trim()})}); }
+    else { if(!confirm(`${id} を削除しますか？ Frigate の登録画像も消え、この ID の訪問は未特定に戻ります。`)) return; await api(`/api/persons/${encodeURIComponent(id)}/purge`, {method:'POST', headers:{'Content-Type':'application/json'}, body:'{}'}); }
+    loadAll();
+  }catch(err){ alert('失敗: '+err.message); } });
+function playClip(ids, title){
+  const list = ids.split(',').filter(Boolean); let i = 0;
+  const show = () => { $('#modalVideo').src = `/api/events/${encodeURIComponent(list[i])}/clip.mp4`; $('#modalVideo').play().catch(()=>{});
+    $('#modalTitle').textContent = title; $('#modalFrigate').href = `/frigate/explore?event_id=${encodeURIComponent(list[i])}`;
+    $('#modalEvents').innerHTML = list.length>1 ? list.map((id,k)=>`<button class="mini" data-k="${k}" ${k===i?'style="color:var(--fg);border-color:var(--accent)"':''}>${k+1}/${list.length}</button>`).join(' ') : ''; };
+  $('#modalEvents').onclick = e => { if(e.target.dataset.k!=null){ i = +e.target.dataset.k; show(); } };
+  show(); $('#modal').classList.add('on');
+}
+function closeModal(){ $('#modal').classList.remove('on'); const v = $('#modalVideo'); v.pause(); v.removeAttribute('src'); v.load(); }
+$('#modalClose').addEventListener('click', closeModal);
+$('#modal').addEventListener('click', e=>{ if(e.target===e.currentTarget) closeModal(); });
+document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeModal(); });
+document.addEventListener('click', e=>{ const b = e.target.closest('button[data-play]'); if(b) playClip(b.dataset.play, b.dataset.title); });
+document.addEventListener('click', e=>{ const c = e.target.closest('code.clickable[data-filter]'); if(c){ visitFilter = c.dataset.filter; loadVisits(); $('#visits').scrollIntoView({behavior:'smooth', block:'start'}); } });
+$('#visitFilterClear').addEventListener('click', ()=>{ visitFilter = null; loadVisits(); });
+$('#alertSeg').addEventListener('click', e=>{ if(e.target.dataset.m){ alertMin = e.target.dataset.m; [...e.currentTarget.children].forEach(b=>b.classList.toggle('on', b===e.target)); loadAlerts(); }});
+loadAll(); setInterval(loadAll, 60000);
+</script>
+</body>
+</html>

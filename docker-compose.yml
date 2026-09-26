@@ -1,0 +1,80 @@
+# ベース構成（GPU なし・Mac / WSL でもそのまま動く）
+# N100 では .env に COMPOSE_FILE=docker-compose.yml:docker-compose.n100.yml を設定して
+# iGPU 用 override を重ねる
+services:
+  frigate:
+    container_name: frigate
+    # N100(amd64): stable / Apple Silicon Mac: stable-standard-arm64（.env の FRIGATE_TAG で切替）
+    image: ghcr.io/blakeblackshear/frigate:${FRIGATE_TAG:-stable}
+    restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    shm_size: "256mb"
+    env_file: .env
+    environment:
+      # config.yml 内で {FRIGATE_RTSP_USER} などとして参照する
+      FRIGATE_RTSP_USER: ${RTSP_USER}
+      FRIGATE_RTSP_PASSWORD: ${RTSP_PASS}
+      FRIGATE_CAMERA_IP: ${CAMERA_IP}
+      TZ: ${TZ:-Asia/Tokyo}
+      # 読み込む設定ファイル。Mac では /config/config.mac.yml を指定する
+      CONFIG_FILE: ${CONFIG_FILE:-/config/config.yml}
+    volumes:
+      - ./config:/config
+      - ./media:/media/frigate
+      - type: tmpfs
+        target: /tmp/cache
+        tmpfs:
+          size: 1000000000
+    ports:
+      # 通常の入口は proxy（8080）に集約。Frigate UI は http://<host>:8080/frigate/
+      # Frigate API（認証なし・管理者権限）。ホスト内の curl 用にループバックのみ。gatekeeper は compose 内ネットワークで到達する
+      - "127.0.0.1:5000:5000"
+      # 必要なら開ける: "8971:8971"（Frigate UI 直接）、"8554:8554"（RTSP 再配信）、"127.0.0.1:1984:1984"（go2rtc UI）
+
+  # 自動分類サービス（門番くん本体）: Frigate の顔試行画像を集めて人物 ID を自動で振る
+  gatekeeper:
+    container_name: gatekeeper
+    build: ./services/gatekeeper
+    restart: unless-stopped
+    stop_grace_period: 30s   # 処理中のイベントを終えてから止まる
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    depends_on:
+      frigate:
+        condition: service_healthy
+    environment:
+      FRIGATE_URL: http://frigate:5000
+      CAMERA: entrance
+      TZ: ${TZ:-Asia/Tokyo}
+      POLL_INTERVAL: 15
+      # 危険度アラートの通知先（.env で設定。空なら通知しない）
+      DISCORD_WEBHOOK_URL: ${DISCORD_WEBHOOK_URL:-}
+      DASHBOARD_URL: ${DASHBOARD_URL:-}
+      ALERT_MIN_LEVEL: ${ALERT_MIN_LEVEL:-medium}
+    volumes:
+      - ./data:/data
+
+  # 入口を 1 つにまとめるリバースプロキシ: http://<host>:8080/ が統計、/frigate/ が Frigate UI
+  proxy:
+    container_name: proxy
+    image: nginx:1.27-alpine
+    restart: unless-stopped
+    depends_on:
+      - gatekeeper
+      - frigate
+    ports:
+      - "8080:80"
+    volumes:
+      - ./services/proxy/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"

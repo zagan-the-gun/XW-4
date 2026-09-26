@@ -1,0 +1,108 @@
+# Frigate 設定（N100 / Intel iGPU / OpenVINO 版）
+# 対象: Frigate 0.18（image: frigate:stable）
+# 認証情報は docker-compose.yml から環境変数で渡す
+
+mqtt:
+  enabled: false
+
+detectors:
+  ov:
+    type: openvino
+    device: GPU   # iGPU が使えなければ CPU に変更
+
+model:
+  width: 300
+  height: 300
+  input_tensor: nhwc
+  input_pixel_format: bgr
+  path: /openvino-model/ssdlite_mobilenet_v2.xml
+  labelmap_path: /openvino-model/coco_91cl_bkgr.txt
+
+ffmpeg:
+  hwaccel_args: preset-vaapi   # iGPU が使えなければ削除（ソフトウェアデコード）
+  input_args: preset-rtsp-restream
+
+go2rtc:
+  streams:
+    entrance:
+      - rtsp://{FRIGATE_RTSP_USER}:{FRIGATE_RTSP_PASSWORD}@{FRIGATE_CAMERA_IP}:554/cam/realmonitor?channel=1&subtype=00
+    # 拡張用の低解像度ストリームが必要になったら有効化
+    # entrance_low:
+    #   - ffmpeg:entrance#video=h264#width=640
+
+cameras:
+  entrance:
+    enabled: true
+    ffmpeg:
+      inputs:
+        - path: rtsp://127.0.0.1:8554/entrance
+          input_args: preset-rtsp-restream
+          roles:
+            - detect
+            - record
+    # onvif: は設定しない。Victure PC530 の ONVIF には PTZ 設定が無く（2026-09 調査）、
+    # Frigate から首振りを制御できない。首振りはアプリ専用プロトコル（ポート 34567）のみ
+    detect:
+      enabled: true
+      width: 1280
+      height: 720
+      fps: 5
+    objects:
+      track:
+        - person
+      filters:
+        person:
+          min_area: 5000
+          threshold: 0.7
+    # ゾーンは使わない（カメラの向きが変わる・首位置がリセットされるため）。
+    # 通行人も含めて映った person を全員記録し、分類は自前サービス側で行う
+    review:
+      alerts:
+        labels:
+          - person
+    snapshots:
+      enabled: true
+      bounding_box: true
+      crop: false
+      retain:
+        default: 90
+    record:
+      enabled: true
+      # 0.18 形式: 常時録画は 0 日（無効）、動きのある区間は 3 日
+      continuous:
+        days: 0
+      motion:
+        days: 3
+      alerts:
+        retain:
+          days: 30
+          mode: motion
+      detections:
+        retain:
+          days: 30
+          mode: motion
+
+# 顔認識（model_size: small は CPU で動く）。未登録の顔は unknown として Face Library に溜まる
+face_recognition:
+  enabled: true
+  model_size: small
+  min_area: 1600   # 40x40px 未満の顔は無視。この画角では顔が 40〜80px なのでこれ以上は上げない
+  # 小さい顔では別人にも高スコアが出るため厳しめ（既定 0.8 / 0.9 では通行人を登録者と誤認した）
+  unknown_score: 0.85
+  recognition_threshold: 0.93
+  # 1 フレームだけの一致でラベル付けしない
+  min_faces: 2
+  save_attempts: 300   # 通行人が多いと試行画像が増えるので多めに保持
+
+# セマンティック検索: 各イベントのサムネイル（服装・持ち物を含む見た目）を数値化し、類似イベントを探せる。
+# gatekeeper の「見た目による紐付け」に使う。初回はモデル取得（数百 MB）と既存イベントの索引作成が走る
+semantic_search:
+  enabled: true
+  model: jinav1
+  model_size: small   # CPU 向け
+  # reindex: true     # 既存イベントの索引を作り直したいときだけ一時的に有効化する（起動時に全件埋め込み）
+
+birdseye:
+  enabled: false
+
+version: 0.18-0
