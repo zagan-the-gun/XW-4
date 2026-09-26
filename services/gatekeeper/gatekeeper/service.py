@@ -251,17 +251,18 @@ class Gatekeeper:
             )
             notified = False
             if should_notify:
-                notified = self._notify(g, r, subject, names)
+                notified = self._notify(g, r, subject, names, now)
                 sent += 1 if notified else 0
             if prev is None or level_idx > prev_level or notified:
                 self.db.upsert_alert(g["event_id"], subject, r.level, r.score, r.reasons, g["start_time"], now, notified)
         return sent
 
-    def _notify(self, g: dict, r, subject: Optional[str], names: Dict[str, Optional[str]]) -> bool:
+    def _notify(self, g: dict, r, subject: Optional[str], names: Dict[str, Optional[str]], now: float) -> bool:
         who = (f"{subject} {names.get(subject) or ''}".strip() if subject else "未特定の人物")
         title = f"[{riskmod.LEVEL_JA[r.level]}] 玄関前: {who}"
         t = time.strftime("%m/%d %H:%M", time.localtime(g["start_time"]))
-        dwell = int((g.get("end_time") or g["start_time"]) - g["start_time"])
+        end = now if g.get("in_progress") else (g.get("end_time") or g["start_time"])
+        dwell = int(max(0.0, end - g["start_time"]))
         fields = [("時刻", t), ("滞在", f"{dwell} 秒" + ("（継続中）" if g.get("in_progress") else "")),
                   ("スコア", f"{r.score}"), ("理由", "、".join(r.reasons) or "-")]
         image = None
